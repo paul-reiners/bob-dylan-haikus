@@ -4,3 +4,4 @@ data/*
 .gitignore~
 poems/
 src/main/r/bob_dylan.html
+src/main/r/rsconnect/

@@ -1,35 +1,272 @@
 ---
-title: "Bob Dylan Lyric Analysis"
+title: "'Time' out of Mind: Bob Dylan's Lyric Diction"
 author: "Paul Reiners"
 date: "7/20/2018"
 output: html_document
 ---
 
 ```{r setup, include=FALSE, message=FALSE, echo=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning=FALSE, cache = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, cache = FALSE, message = FALSE)
 ```
 
-## Including Plots
+## Songs
 
-You can also embed plots, for example:
+As we can see, Bob Dylan was the most prolific in the 1960s and his song output
+decreased over the decades.  However, in the 2000s, he made a comeback.
 
 ```{r pressure, echo=FALSE, message=FALSE}
+# Load the libraries
+
+#most of the libraries needed
+library(dplyr) #data manipulation
+library(ggplot2) #visualizations
+library(gridExtra) #viewing multiple plots together
+library(tidytext) #text mining
+library(wordcloud2) #creative visualizations
+library(stringr)
+
+# Read in the data
+
+bob_dylan <- read.csv("../../../data/bob_dylan_new.csv", stringsAsFactors = FALSE)
+# Descriptive Statistics
+
+#define some colors to use throughout
+my_colors <- c("#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#D55E00")
+
+theme_lyrics <- function() 
+{
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.text.x = element_blank(), 
+          axis.ticks = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          legend.position = "none")
+}
+
+bob_dylan %>%
+    filter(decade != "NA") %>%
+    group_by(decade) %>%
+    summarise(number_of_songs = n()) %>%
+    ggplot() + 
+    geom_bar(aes(x = decade, y = number_of_songs), stat = "identity")  +
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.title = element_blank(),
+          panel.grid.minor = element_blank()) +
+    ggtitle("Released Songs") +
+    labs(x = NULL, y = "Song Count")
 ```
 
-```{r tokenized_format_example, echo=FALSE, message=FALSE}
-```
+## Words
 
-```{r songs_with_highest_word_count}
-```
-
-```{r word_count_description}
-```
-
-```{r full_word_count}
-```
-
-```{r most_frequently_used_words}
-```
+Unsurprising for a popular song writer, in general, but perhaps surprising for Bob
+Dylan, in particular, "love" is the most frequently used (non-stop) word in
+his lyrics.
 
 ```{r}
+library(knitr) # for dynamic reporting
+library(kableExtra) # create a nicely formated HTML table
+library(formattable) # for the color_tile function
+
+# Text Mining
+# Tidy Text Format
+# Data Formats and Tokenization
+undesirable_words <- 
+    c("rybody", "instrumental", "chorus")
+
+# Word Frequency
+full_word_count <- bob_dylan %>%
+    unnest_tokens(word, lyrics) %>%
+    group_by(song) %>%
+    summarise(num_words = n()) %>%
+    arrange(desc(num_words)) 
+
+# Word Clouds
+#unnest and remove stop, undesirable and short words
+bob_dylan_words_filtered <- bob_dylan %>%
+    unnest_tokens(word, lyrics) %>%
+    anti_join(stop_words) %>%
+    distinct() %>%
+    filter(!word %in% undesirable_words) %>%
+    filter(nchar(word) > 3)
+
+bob_dylan_words_filtered %>%
+    count(word, sort = TRUE) %>%
+    top_n(10) %>%
+    ungroup() %>%
+    mutate(word = reorder(word, n)) %>%
+    ggplot() +
+    geom_col(aes(word, n), fill = my_colors[4]) +
+    theme(legend.position = "none", 
+          plot.title = element_text(hjust = 0.5),
+          panel.grid.major = element_blank()) +
+    xlab("") + 
+    ylab("Song Count") +
+    ggtitle("Most Frequently Used Words in Bob Dylan Lyrics") +
+    coord_flip()
+
+bob_dylan_words_filtered <- bob_dylan %>%
+    unnest_tokens(word, lyrics) %>%
+    anti_join(stop_words) %>%
+    distinct() %>%
+    filter(!word %in% undesirable_words) %>%
+    filter(nchar(word) > 3)
+bob_dylan_words_counts <- bob_dylan_words_filtered %>%
+    count(word, sort = TRUE) 
+
+wordcloud2(bob_dylan_words_counts[1:300, ], size = .5)
+
+# wordcloud2(bob_dylan_words_counts[1:300, ], figPath = "../img/glaser2.png", 
+#            color = "random-dark", size = 1.5)
+
+# letterCloud(bob_dylan_words_counts[1:300, ], word = "DYLAN", size = 2)
 ```
+
+## Word Use Across the Decades
+
+These results are perhaps the most interesting.  Although "love" is the most commonly
+used word overall, "time" is the most frequently used word in Dylan's lyrics in
+the 1960s, 1970s, and 1980s and is in the top 10 during the 1990s and 2000s.  (Although ["time" is a very commonly-used word](https://simple.wikipedia.org/wiki/Most_common_words_in_English)).  In the 2010s, neither "love" nor "time" is in the top 10
+and things get a bit dark.
+
+```{r}
+timeless_words <- bob_dylan_words_filtered %>% 
+    filter(decade != 'NA') %>%
+    group_by(decade) %>%
+    count(word, decade, sort = TRUE) %>%
+    slice(seq_len(8)) %>%
+    ungroup() %>%
+    arrange(decade,n) %>%
+    mutate(row = row_number()) 
+
+timeless_words %>%
+    ggplot(aes(row, n, fill = decade)) +
+    geom_col(show.legend = NULL) +
+    labs(x = NULL, y = "Song Count") +
+    ggtitle("Timeless Words") + 
+    theme_lyrics() +  
+    facet_wrap(~decade, scales = "free", ncol = 5) +
+    scale_x_continuous(  # This handles replacement of row 
+        breaks = timeless_words$row, # notice need to reuse data frame
+        labels = timeless_words$word) +
+    coord_flip()
+```
+
+## Lexical Analysis
+
+Lexical diversity has increased slightly over the years in Bob Dylan's lyrics.
+In other words, he's been using a wider range of words.
+
+```{r}
+# Lexical Diversity
+lex_diversity_per_year <- bob_dylan %>%
+    filter(decade != "NA") %>%
+    unnest_tokens(word, lyrics) %>%
+    group_by(song,year) %>%
+    summarise(lex_diversity = n_distinct(word)) %>%
+    arrange(desc(lex_diversity)) 
+
+diversity_plot <- lex_diversity_per_year %>%
+    ggplot(aes(year, lex_diversity)) +
+    geom_point(color = my_colors[3],
+               alpha = .4, 
+               size = 4, 
+               position = "jitter") + 
+    stat_smooth(color = "black", se = FALSE, method = "lm") +
+    geom_smooth(aes(x = year, y = lex_diversity), se = FALSE,
+                color = "blue", lwd = 2) +
+    ggtitle("Lexical Diversity") +
+    xlab("") + 
+    ylab("") +
+    scale_color_manual(values = my_colors) +
+    theme_classic() + 
+    theme_lyrics()
+
+diversity_plot
+```
+
+Lexical density has decreased slightly over the years.  That is, his songs "say less" over time.
+Given the high density and complexity of his lyrics from 1964--1966, this is probably not surprising.
+However, lexical density has been making a comeback in his most recent songs.
+
+```{r}
+# Lexical Density
+lex_density_per_year <- bob_dylan %>%
+    filter(decade != "NA") %>%
+    unnest_tokens(word, lyrics) %>%
+    group_by(song,year) %>%
+    summarise(lex_density = n_distinct(word)/n()) %>%
+    arrange(desc(lex_density))
+
+density_plot <- lex_density_per_year %>%
+    ggplot(aes(year, lex_density)) + 
+    geom_point(color = my_colors[4],
+               alpha = .4, 
+               size = 4, 
+               position = "jitter") + 
+    stat_smooth(color = "black", 
+                se = FALSE, 
+                method = "lm") +
+    geom_smooth(aes(x = year, y = lex_density), 
+                se = FALSE,
+                color = "blue", 
+                lwd = 2) +
+    ggtitle("Lexical Density") + 
+    xlab("") + 
+    ylab("") +
+    scale_color_manual(values = my_colors) +
+    theme_classic() + 
+    theme_lyrics()
+
+density_plot
+```
+
+## TF-IDF
+
+See [Wikipedia](https://en.wikipedia.org/wiki/Tf–idf) for a definition of TF-IDF.
+I don't find these results particularly interesting.  It might be interesting
+to calculate TF-IDF where the corpus consists of popular songs in general,
+rather than just measuring it against Dylan's own lyrics.  
+
+It's nice to see
+ "Peter" (from "In the Garden") show up in the top 10 of the 1980s, though.
+ I wonder how different the results might be if Bob Dylan's "gospel period"
+ wasn't split across two decades.  In general, it would be interesting
+ to group things by Dylan's different musical phases, rather than by decade.
+ 
+```{r}
+tfidf_words_decade <- bob_dylan %>%
+    unnest_tokens(word, lyrics) %>%
+    distinct() %>%
+    filter(!word %in% undesirable_words & decade != 'NA') %>%
+    filter(nchar(word) > 3) %>%
+    count(decade, word, sort = TRUE) %>%
+    ungroup() %>%
+    bind_tf_idf(word, decade, n) %>%
+    arrange(desc(tf_idf))
+
+top_tfidf_words_decade <- tfidf_words_decade %>% 
+    group_by(decade) %>% 
+    slice(seq_len(8)) %>%
+    ungroup() %>%
+    arrange(decade, tf_idf) %>%
+    mutate(row = row_number())
+
+top_tfidf_words_decade %>%
+    ggplot(aes(x = row, tf_idf, fill = decade)) +
+    geom_col(show.legend = NULL) +
+    labs(x = NULL, y = "TF-IDF") + 
+    ggtitle("Important Words using TF-IDF by Decade") +
+    theme_lyrics() +  
+    facet_wrap(~decade, 
+               ncol = 3, nrow = 2, 
+               scales = "free") +
+    scale_x_continuous(  # this handles replacement of row 
+        breaks = top_tfidf_words_decade$row, # notice need to reuse data frame
+        labels = top_tfidf_words_decade$word) +
+    coord_flip()
+```
+
+## Acknowledgements
+
+This article is highly indebted to the techniques used in ["Lyric Analysis with NLP & Machine Learning with R"](https://www.datacamp.com/community/tutorials/R-nlp-machine-learning) written
+by [Debbie Liske](https://www.datacamp.com/profile/debbieliskefa5156febfc047aeb79dee6c802d3d04).

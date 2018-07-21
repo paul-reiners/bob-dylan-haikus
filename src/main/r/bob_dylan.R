@@ -402,4 +402,3 @@ wordcloud2(wc[1:300, ],
            size = .2, 
            fontWeight = "bold", 
            gridSize = 1.5 )
-
