@@ -1,0 +1,35 @@
+---
+title: "Bob Dylan Lyric Analysis"
+author: "Paul Reiners"
+date: "7/20/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, cache = FALSE)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE, message=FALSE}
+```
+
+```{r tokenized_format_example, echo=FALSE, message=FALSE}
+```
+
+```{r songs_with_highest_word_count}
+```
+
+```{r word_count_description}
+```
+
+```{r full_word_count}
+```
+
+```{r most_frequently_used_words}
+```
+
+```{r}
+```
