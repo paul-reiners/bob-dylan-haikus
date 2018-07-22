@@ -104,12 +104,6 @@ bob_dylan_words_filtered %>%
     ggtitle("Most Frequently Used Words in Bob Dylan Lyrics") +
     coord_flip()
 
-bob_dylan_words_filtered <- bob_dylan %>%
-    unnest_tokens(word, lyrics) %>%
-    anti_join(stop_words) %>%
-    distinct() %>%
-    filter(!word %in% undesirable_words) %>%
-    filter(nchar(word) > 3)
 bob_dylan_words_counts <- bob_dylan_words_filtered %>%
     count(word, sort = TRUE) 
 
@@ -117,19 +111,17 @@ wordcloud2(bob_dylan_words_counts[1:300, ], size = .5)
 
 # wordcloud2(bob_dylan_words_counts[1:300, ], figPath = "../img/glaser2.png", 
 #            color = "random-dark", size = 1.5)
-
-# letterCloud(bob_dylan_words_counts[1:300, ], word = "DYLAN", size = 2)
 ```
 
 ## Word Use Across the Decades
 
 These results are perhaps the most interesting.  Although "love" is the most commonly
 used word overall, "time" is the most frequently used word in Dylan's lyrics in
-the 1960s, 1970s, and 1980s and is in the top 8 during the 1990s and 2000s.  (Although ["time" is a very commonly-used word](https://simple.wikipedia.org/wiki/Most_common_words_in_English)).  In the 2010s, neither "love" nor "time" is in the top 8
+the 1960s, 1970s, and 1980s and is in the top 8 during the 1990s and 2000s.  (Although ["time" is a very commonly-used word](https://simple.wikipedia.org/wiki/Most_common_words_in_English) in general)  In the 2010s, neither "love" nor "time" is in the top 8
 and things get a bit dark.
 
 ```{r words_by_decade}
-timeless_words <- bob_dylan_words_filtered %>% 
+timeless_words_decade <- bob_dylan_words_filtered %>% 
     filter(decade != 'NA') %>%
     group_by(decade) %>%
     count(word, decade, sort = TRUE) %>%
@@ -138,7 +130,7 @@ timeless_words <- bob_dylan_words_filtered %>%
     arrange(decade,n) %>%
     mutate(row = row_number()) 
 
-timeless_words %>%
+timeless_words_decade %>%
     ggplot(aes(row, n, fill = decade)) +
     geom_col(show.legend = NULL) +
     labs(x = NULL, y = "Song Count") +
@@ -146,8 +138,8 @@ timeless_words %>%
     theme_lyrics() +  
     facet_wrap(~decade, scales = "free", ncol = 5) +
     scale_x_continuous(  # This handles replacement of row 
-        breaks = timeless_words$row, # notice need to reuse data frame
-        labels = timeless_words$word) +
+        breaks = timeless_words_decade$row, # notice need to reuse data frame
+        labels = timeless_words_decade$word) +
     coord_flip()
 ```
 
@@ -156,7 +148,7 @@ timeless_words %>%
 Now we look at the most popular words for each album.
 
 ```{r words_by_album, fig.width=12, fig.height=16}
-timeless_words <- bob_dylan_words_filtered %>% 
+timeless_words_album <- bob_dylan_words_filtered %>% 
     filter(album != 'NA' & album != '') %>%
     group_by(album) %>%
     count(word, album, sort = TRUE) %>%
@@ -165,16 +157,23 @@ timeless_words <- bob_dylan_words_filtered %>%
     arrange(album,n) %>%
     mutate(row = row_number()) 
 
-timeless_words %>%
+album_year_df <- unique(bob_dylan[c("year", "album")])
+timeless_words_album_year <- 
+    merge(x = timeless_words_album, y = album_year_df, by = "album", all.x = TRUE)
+timeless_words_album_year_sorted <- timeless_words_album_year[order(timeless_words_album_year$year),]
+
+timeless_words_album_year_sorted$album2 <- 
+    reorder(timeless_words_album_year_sorted$album, timeless_words_album_year_sorted$year)
+timeless_words_album_year_sorted %>%
     ggplot(aes(row, n, fill = album)) +
     geom_col(show.legend = NULL) +
     labs(x = NULL, y = "Song Count") +
-    ggtitle("Timeless Words") + 
+    ggtitle("Timeless Words by Album") + 
     theme_lyrics() +  
-    facet_wrap(~album, scales = "free", ncol = 4) +
+    facet_wrap(~album2, scales = "free", ncol = 4) +
     scale_x_continuous(  # This handles replacement of row 
-        breaks = timeless_words$row, # notice need to reuse data frame
-        labels = timeless_words$word) +
+        breaks = timeless_words_album$row, # notice need to reuse data frame
+        labels = timeless_words_album$word) +
     coord_flip()
 ```
 
@@ -290,3 +289,7 @@ top_tfidf_words_album %>%
 
 This article is highly indebted to the techniques used in ["Lyric Analysis with NLP & Machine Learning with R"](https://www.datacamp.com/community/tutorials/R-nlp-machine-learning) written
 by [Debbie Liske](https://www.datacamp.com/profile/debbieliskefa5156febfc047aeb79dee6c802d3d04).
+
+## Code
+
+My code is available in the [bob-dylan-haikus](https://github.com/paul-reiners/bob-dylan-haikus) project.
