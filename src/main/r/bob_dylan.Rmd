@@ -71,7 +71,7 @@ library(formattable) # for the color_tile function
 # Tidy Text Format
 # Data Formats and Tokenization
 undesirable_words <- 
-    c("rybody", "instrumental", "chorus")
+    c("rybody", "instrumental", "chorus", "babababababy", "bautiful")
 
 # Word Frequency
 full_word_count <- bob_dylan %>%
@@ -125,10 +125,10 @@ wordcloud2(bob_dylan_words_counts[1:300, ], size = .5)
 
 These results are perhaps the most interesting.  Although "love" is the most commonly
 used word overall, "time" is the most frequently used word in Dylan's lyrics in
-the 1960s, 1970s, and 1980s and is in the top 10 during the 1990s and 2000s.  (Although ["time" is a very commonly-used word](https://simple.wikipedia.org/wiki/Most_common_words_in_English)).  In the 2010s, neither "love" nor "time" is in the top 10
+the 1960s, 1970s, and 1980s and is in the top 8 during the 1990s and 2000s.  (Although ["time" is a very commonly-used word](https://simple.wikipedia.org/wiki/Most_common_words_in_English)).  In the 2010s, neither "love" nor "time" is in the top 8
 and things get a bit dark.
 
-```{r}
+```{r words_by_decade}
 timeless_words <- bob_dylan_words_filtered %>% 
     filter(decade != 'NA') %>%
     group_by(decade) %>%
@@ -145,6 +145,33 @@ timeless_words %>%
     ggtitle("Timeless Words") + 
     theme_lyrics() +  
     facet_wrap(~decade, scales = "free", ncol = 5) +
+    scale_x_continuous(  # This handles replacement of row 
+        breaks = timeless_words$row, # notice need to reuse data frame
+        labels = timeless_words$word) +
+    coord_flip()
+```
+
+## Word Use Across Albums
+
+Now we look at the most popular words for each album.
+
+```{r words_by_album, fig.width=12, fig.height=16}
+timeless_words <- bob_dylan_words_filtered %>% 
+    filter(album != 'NA' & album != '') %>%
+    group_by(album) %>%
+    count(word, album, sort = TRUE) %>%
+    slice(seq_len(8)) %>%
+    ungroup() %>%
+    arrange(album,n) %>%
+    mutate(row = row_number()) 
+
+timeless_words %>%
+    ggplot(aes(row, n, fill = album)) +
+    geom_col(show.legend = NULL) +
+    labs(x = NULL, y = "Song Count") +
+    ggtitle("Timeless Words") + 
+    theme_lyrics() +  
+    facet_wrap(~album, scales = "free", ncol = 4) +
     scale_x_continuous(  # This handles replacement of row 
         breaks = timeless_words$row, # notice need to reuse data frame
         labels = timeless_words$word) +
@@ -223,46 +250,39 @@ density_plot
 ## TF-IDF
 
 See [Wikipedia](https://en.wikipedia.org/wiki/Tf–idf) for a definition of TF-IDF.
-I don't find these results particularly interesting.  It might be interesting
-to calculate TF-IDF where the corpus consists of popular songs in general,
-rather than just measuring it against Dylan's own lyrics.  
-
-It's nice to see
- "Peter" (from "In the Garden") show up in the top 10 of the 1980s, though.
- I wonder how different the results might be if Bob Dylan's "gospel period"
- wasn't split across two decades.  In general, it would be interesting
- to group things by Dylan's different musical phases, rather than by decade.
+Using TF-IDF on albums is quite informative.  We see which words are important
+on a particular album.
  
-```{r}
-tfidf_words_decade <- bob_dylan %>%
+```{r fig.width=12, fig.height=16}
+tfidf_words_album <- bob_dylan %>%
     unnest_tokens(word, lyrics) %>%
     distinct() %>%
-    filter(!word %in% undesirable_words & decade != 'NA') %>%
+    filter(!word %in% undesirable_words & album != '') %>%
     filter(nchar(word) > 3) %>%
-    count(decade, word, sort = TRUE) %>%
+    count(album, word, sort = TRUE) %>%
     ungroup() %>%
-    bind_tf_idf(word, decade, n) %>%
+    bind_tf_idf(word, album, n) %>%
     arrange(desc(tf_idf))
 
-top_tfidf_words_decade <- tfidf_words_decade %>% 
-    group_by(decade) %>% 
+top_tfidf_words_album <- tfidf_words_album %>% 
+    group_by(album) %>% 
     slice(seq_len(8)) %>%
     ungroup() %>%
-    arrange(decade, tf_idf) %>%
+    arrange(album, tf_idf) %>%
     mutate(row = row_number())
 
-top_tfidf_words_decade %>%
-    ggplot(aes(x = row, tf_idf, fill = decade)) +
+top_tfidf_words_album %>%
+    ggplot(aes(x = row, tf_idf, fill = album)) +
     geom_col(show.legend = NULL) +
     labs(x = NULL, y = "TF-IDF") + 
-    ggtitle("Important Words using TF-IDF by Decade") +
+    ggtitle("Important Words using TF-IDF by Album") +
     theme_lyrics() +  
-    facet_wrap(~decade, 
-               ncol = 3, nrow = 2, 
+    facet_wrap(~album, 
+               ncol = 4, 
                scales = "free") +
     scale_x_continuous(  # this handles replacement of row 
-        breaks = top_tfidf_words_decade$row, # notice need to reuse data frame
-        labels = top_tfidf_words_decade$word) +
+        breaks = top_tfidf_words_album$row, # notice need to reuse data frame
+        labels = top_tfidf_words_album$word) +
     coord_flip()
 ```
 
