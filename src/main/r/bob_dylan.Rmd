@@ -109,9 +109,10 @@ bob_dylan_words_counts <- bob_dylan_words_filtered %>%
 
 wordcloud2(bob_dylan_words_counts[1:300, ], size = .5)
 
-# wordcloud2(bob_dylan_words_counts[1:300, ], figPath = "../img/glaser2.png", 
-#            color = "random-dark", size = 1.5)
+#wordcloud2(bob_dylan_words_counts[1:300, ], figPath = "../../../img/glaser_clear.png", 
+#            size = .5)
 ```
+
 
 ## Word Use Across the Decades
 
@@ -160,11 +161,10 @@ timeless_words_album <- bob_dylan_words_filtered %>%
 album_year_df <- unique(bob_dylan[c("year", "album")])
 timeless_words_album_year <- 
     merge(x = timeless_words_album, y = album_year_df, by = "album", all.x = TRUE)
-timeless_words_album_year_sorted <- timeless_words_album_year[order(timeless_words_album_year$year),]
 
-timeless_words_album_year_sorted$album2 <- 
-    reorder(timeless_words_album_year_sorted$album, timeless_words_album_year_sorted$year)
-timeless_words_album_year_sorted %>%
+timeless_words_album_year$album2 <- 
+    reorder(timeless_words_album_year$album, timeless_words_album_year$year)
+timeless_words_album_year %>%
     ggplot(aes(row, n, fill = album)) +
     geom_col(show.legend = NULL) +
     labs(x = NULL, y = "Song Count") +
@@ -270,13 +270,18 @@ top_tfidf_words_album <- tfidf_words_album %>%
     arrange(album, tf_idf) %>%
     mutate(row = row_number())
 
-top_tfidf_words_album %>%
+top_tfidf_words_album_year <- 
+    merge(x = top_tfidf_words_album, y = album_year_df, by = "album", all.x = TRUE)
+top_tfidf_words_album_year$album2 <- 
+    reorder(top_tfidf_words_album_year$album, top_tfidf_words_album_year$year)
+
+top_tfidf_words_album_year %>%
     ggplot(aes(x = row, tf_idf, fill = album)) +
     geom_col(show.legend = NULL) +
     labs(x = NULL, y = "TF-IDF") + 
     ggtitle("Important Words using TF-IDF by Album") +
     theme_lyrics() +  
-    facet_wrap(~album, 
+    facet_wrap(~album2, 
                ncol = 4, 
                scales = "free") +
     scale_x_continuous(  # this handles replacement of row 

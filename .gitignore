@@ -5,3 +5,6 @@ data/*
 poems/
 src/main/r/bob_dylan.html
 src/main/r/rsconnect/
+.Rproj.user
+img/
+src/main/r/r.Rproj
