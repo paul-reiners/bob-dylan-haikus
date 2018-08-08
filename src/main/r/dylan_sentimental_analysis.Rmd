@@ -1,0 +1,330 @@
+---
+title: "Bob Dylan Lyric Sentiment Analysis"
+author: "Paul Reiners"
+date: "7/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r initialization, echo=FALSE, include=FALSE}
+library(dplyr) #Data manipulation (also included in the tidyverse package)
+library(tidytext) #Text mining
+library(tidyr) #Spread, separate, unite, text mining (also included in the tidyverse package)
+library(widyr) #Use for pairwise correlation
+
+#Visualizations!
+library(ggplot2) #Visualizations (also included in the tidyverse package)
+library(ggrepel) #`geom_label_repel`
+library(gridExtra) #`grid.arrange()` for multi-graphs
+library(knitr) #Create nicely formatted output tables
+library(kableExtra) #Create nicely formatted output tables
+library(formattable) #For the color_tile function
+library(circlize) #Visualizations - chord diagram
+library(memery) #Memes - images with plots
+library(magick) #Memes - images with plots (image_read)
+library(yarrr)  #Pirate plot
+library(radarchart) #Visualizations
+library(igraph) #ngram network diagrams
+library(ggraph) #ngram network diagrams
+
+#Define some colors to use throughout
+my_colors <- c("#362A28", "#6F3036", "#4C3735", "#725047", "#8B675E", "#A5817B")
+
+#Customize ggplot2's default theme settings
+#This tutorial doesn't actually pass any parameters, but you may use it again in future tutorials so it's nice to have the options
+theme_lyrics <- function(aticks = element_blank(),
+                         pgminor = element_blank(),
+                         lt = element_blank(),
+                         lp = "none")
+{
+  theme(plot.title = element_text(hjust = 0.5), #Center the title
+        axis.ticks = aticks, #Set axis ticks to on or off
+        panel.grid.minor = pgminor, #Turn the minor grid lines on or off
+        legend.title = lt, #Turn the legend title on or off
+        legend.position = lp) #Turn the legend on or off
+}
+
+#Customize the text tables for consistency using HTML formatting
+my_kable_styling <- function(dat, caption) {
+  kable(dat, "html", escape = FALSE, caption = caption) %>%
+    kable_styling(bootstrap_options = c("striped", "condensed", "bordered"),
+                  full_width = FALSE)
+}
+
+### Sushi Data
+dylan_data <- read.csv('../../../data/bob_dylan_new.csv', stringsAsFactors = FALSE, row.names = 1)
+
+glimpse(dylan_data) #Transposed version of `print()`
+
+### Good Clean Fun: prince_tidy
+undesirable_words <- 
+  c("rybody", "instrumental", "chorus", "babababababy", "bautiful", "don")
+#Create tidy text format: Unnested, Unsummarized, -Undesirables, Stop and Short words
+dylan_tidy <- dylan_data %>%
+  unnest_tokens(word, lyrics) %>% #Break the lyrics into individual words
+  filter(!word %in% undesirable_words) %>% #Remove undesirables
+  filter(!nchar(word) < 3) %>% #Words like "ah" or "oo" used in music
+  anti_join(stop_words) #Data provided by the tidytext package
+
+glimpse(dylan_tidy) #From `dplyr`, better than `str()`.
+```
+
+In this article, we apply the data science technique of sentiment analysis to
+the lyrics of Bob Dylan.
+
+## Lexical diversity over time
+
+We can see Bob Dylan's lexical diversity has increased over time.
+
+```{r pressure, echo=FALSE}
+word_summary <- dylan_tidy %>%
+    filter(decade != "NA") %>%
+  mutate(decade = ifelse(is.na(decade),"NONE", decade)) %>%
+  group_by(decade, song) %>%
+  mutate(word_count = n_distinct(word)) %>%
+  select(song, Released = decade, word_count) %>%
+  distinct() %>% #To obtain one record per song
+  ungroup()
+
+boxplot(word_count ~ Released, #Formula
+           data = word_summary, #Data frame
+           main = "Lexical Diversity Per Decade") 
+```
+
+## Song Count Per Year
+
+```{r song_count, echo=FALSE}
+songs_year <- dylan_data %>%
+  select(song, year) %>%
+  filter(!is.na(year)) %>%
+  group_by(year) %>%
+  summarise(song_count = n())
+
+id <- seq_len(nrow(songs_year))
+songs_year <- cbind(songs_year, id)
+label_data = songs_year
+```
+
+Bob Dylan was the most prolific in the mid-1960s and the mid-1970s (with a trough in-between).
+No surprise there.  There is also a surprise peak in 2009.  This is because both <i>Together Through Life</i>
+and <i>Christmas in the Heart</i> came out that year.  (Arguably, one might want to
+exclude <i>Christmas in the Heart</i>, but the sentiments were presumably his even
+if he didn't write the words.)
+
+```{r, echo=FALSE}
+ggplot(songs_year, aes(x = year, y = song_count)) +
+  geom_bar(stat = "identity", fill = alpha("darkred", 0.7)) +
+  scale_x_continuous("year", breaks = songs_year$year) + 
+  theme(axis.text.x = element_text(angle=90)) + 
+  ylab("song count")
+```
+
+## Detailed Sentiment Analysis
+```{r echo=FALSE, message=FALSE}
+dylan_bing <- dylan_tidy %>%
+  inner_join(get_sentiments("bing"))
+
+dylan_nrc <- dylan_tidy %>%
+  inner_join(get_sentiments("nrc"))
+
+dylan_nrc_sub <- dylan_tidy %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(!sentiment %in% c("positive", "negative"))
+```
+
+### Overall Sentiment
+
+We use two well-known sentiment lexicons: 
+
+ * [NRC Word-Emotion Association Lexicon](https://saifmohammad.com/WebPages/NRC-Emotion-Lexicon.htm)
+ * [Bing sentiment lexicon](https://www.searchenginejournal.com/sentiment-analysis/235945/)
+ 
+Each has their advantages and disadvantages.  Their results are sometimes inconsistent.
+Also, it's arguable whether one should be doing automated sentiment analysis on poetry
+(or song lyrics).  That sort of seems to be missing the point, somehow.  Nevertheless,
+let's look at some of the results.
+ 
+```{r echo=FALSE}
+nrc_plot <- dylan_nrc %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  #Use `fill = -word_count` to make the larger bars darker
+  ggplot(aes(sentiment, word_count, fill = -word_count)) +
+  geom_col() +
+  guides(fill = FALSE) + #Turn off the legend
+  theme_lyrics() +
+  labs(x = NULL, y = "Word Count") +
+  scale_y_continuous(limits = c(0, 5000)) + #Hard code the axis limit
+  ggtitle("Bob Dylan NRC Sentiment") +
+  coord_flip()
+
+plot(nrc_plot)
+
+bing_plot <- dylan_bing %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  ggplot(aes(sentiment, word_count, fill = sentiment)) +
+  geom_col() +
+  guides(fill = FALSE) +
+  theme_lyrics() +
+  labs(x = NULL, y = "Word Count") +
+  scale_y_continuous(limits = c(0, 4000)) +
+  ggtitle("Bob Dylan Bing Sentiment") +
+  coord_flip()
+
+plot(bing_plot)
+```
+
+### Song sentiments over the years
+
+I think it's very interesting that Bob Dylan's lyrics peaked in positivity in 1980.
+This was exactly in the middle of his "gospel period".
+
+```{r echo=FALSE, warning=FALSE}
+dylan_polarity_year <- dylan_bing %>%
+  count(sentiment, year) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(polarity = positive - negative,
+         percent_positive = positive / (positive + negative) * 100)
+
+polarity_over_time <- dylan_polarity_year %>%
+  ggplot(aes(year, polarity, color = ifelse(polarity >= 0,my_colors[5],my_colors[4]))) +
+  geom_col() +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_smooth(method = "lm", se = FALSE, aes(color = my_colors[1])) +
+  theme_lyrics() + theme(plot.title = element_text(size = 11)) +
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("Polarity Over Time")
+
+relative_polarity_over_time <- dylan_polarity_year %>%
+  ggplot(aes(year, percent_positive , color = ifelse(polarity >= 0,my_colors[5],my_colors[4]))) +
+  geom_col() +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_smooth(method = "lm", se = FALSE, aes(color = my_colors[1])) +
+  theme_lyrics() + theme(plot.title = element_text(size = 11)) +
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("Percent Positive Over Time")
+
+grid.arrange(polarity_over_time, relative_polarity_over_time, ncol = 2)
+```
+
+### Relationship Between Mood and Decade
+
+Joy peaks in the 1980s (while quality of records dips) and sadness peaks in the 2010s.
+
+```{r echo=FALSE, fig.height=12}
+decade_mood <-  dylan_nrc %>%
+  filter(decade != "NA" & !sentiment %in% c("positive", "negative")) %>%
+  count(sentiment, decade) %>%
+  group_by(decade, sentiment) %>%
+  summarise(sentiment_sum = sum(n)) %>%
+  ungroup()
+
+decade_agg <- 
+  setNames(aggregate(decade_mood$sentiment_sum, by=list(Category=decade_mood$decade), FUN=sum), c("decade", "sentiment_total"))
+decade_mood_2 <- merge(decade_mood, decade_agg, by="decade")
+decade_mood_2$sentiment_sum_norm <- decade_mood_2$sentiment_sum / decade_mood_2$sentiment_total
+decade_mood <- decade_mood_2
+ 
+## some a bar plot
+par(mfrow = c(3, 2))
+
+sixties = decade_mood[decade_mood$decade == "1960s", ]
+seventies = decade_mood[decade_mood$decade == "1970s", ]
+eighties = decade_mood[decade_mood$decade == "1980s", ]
+nineties = decade_mood[decade_mood$decade == "1990s", ]
+aughts = decade_mood[decade_mood$decade == "2000s", ]
+tens = decade_mood[decade_mood$decade == "2010s", ]
+
+barplot(sixties$sentiment_sum_norm, names.arg = sixties$sentiment, main = "decade=1960s", las=2)
+barplot(seventies$sentiment_sum_norm, names.arg = seventies$sentiment, main = "decade=1970s", las=2)
+barplot(eighties$sentiment_sum_norm, names.arg = eighties$sentiment, main = "decade=1980s", las=2)
+barplot(nineties$sentiment_sum_norm, names.arg = nineties$sentiment, main = "decade=1990s", las=2)
+barplot(aughts$sentiment_sum_norm, names.arg = aughts$sentiment, main = "decade=2000s", las=2)
+barplot(tens$sentiment_sum_norm, names.arg = tens$sentiment, main = "decade=2010s", las=2)
+```
+
+### Real-Time Sentiment
+
+Next we look at the relationship between the personal events in Bob Dylan's life
+and the sentiments expressed in his songs at the time.  Perhaps surprising is that
+his lyrics are the most positive during his "gospel period".  Perhaps less surprising is that they are also
+positive during his time of domesticity during the late 1960s.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+events <- read.csv('../../../data/dylanEvents.csv', stringsAsFactors = FALSE)
+
+year_polarity_bing <- dylan_bing %>%
+  group_by(year, sentiment) %>%
+  count(year, sentiment) %>%
+  spread(sentiment, n) %>%
+  mutate(polarity = positive - negative,
+         ratio = polarity / (positive + negative)) #use polarity ratio in next graph
+
+events %>%
+  #Left join gets event years with no releases
+  left_join(year_polarity_bing) %>%
+  filter(event != " ") %>% #Account for bad data
+  mutate(event = reorder(event, year), #Sort chart by desc year
+         sentiment = ifelse(positive > negative,
+                            "positive", "negative")) %>%
+  ggplot(aes(event, polarity, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() + theme(legend.position = "none") +
+  xlab(NULL) +
+  ggtitle("Sentiment by Events") +
+  coord_flip()
+```
+
+### <i>Blood on the Tracks</i> Sentiment
+
+Since <i>Blood on the Tracks</i> is perhaps Bob Dylan's most autobiographical album 
+(either that or it's based on Chekhov short stories), let's analyze the sentiments 
+in its lyrics.  Sadness is the predominant sentiment; not surprising for probably
+the best 'break-up' record of all time.
+
+```{r echo=FALSE, message=FALSE}
+dylan_nrc %>%
+    filter(album %in% "Blood On The Tracks") %>%
+    group_by(sentiment) %>%
+    summarise(word_count = n()) %>%
+    ungroup() %>%
+    mutate(sentiment = reorder(sentiment, word_count)) %>%
+    ggplot(aes(sentiment, word_count, fill = -word_count)) +
+    geom_col() +
+    guides(fill = FALSE) +
+    theme_minimal() + theme_lyrics() +
+    labs(x = NULL, y = "Word Count") +
+    ggtitle("Blood on the Tracks NRC Sentiment") +
+    coord_flip()
+
+dylan_tidy %>%
+    filter(song %in% "Simple Twist Of Fate") %>%
+    distinct(word) %>%
+    inner_join(get_sentiments("nrc")) %>%
+    ggplot(aes(x = word, fill = sentiment)) +
+    facet_grid(~sentiment) +
+    geom_bar() + #Create a bar for each word per sentiment
+    theme_lyrics() +
+    theme(panel.grid.major.x = element_blank(),
+          axis.text.x = element_blank()) + #Place the words on the y-axis
+    xlab(NULL) + ylab(NULL) +
+    ggtitle("Blood On The Tracks Sentiment Words") +
+    coord_flip()
+```
+
+## Acknowledgements
+
+This article is highly indebted to the techniques described in ["Tidy Sentiment Analysis in R"](https://www.datacamp.com/community/tutorials/sentiment-analysis-R) written
+by [Debbie Liske](https://www.datacamp.com/profile/debbieliskefa5156febfc047aeb79dee6c802d3d04).
+
+## Code
+
+My code is available in the [bob-dylan-haikus](https://github.com/paul-reiners/bob-dylan-haikus) project.

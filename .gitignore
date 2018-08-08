@@ -8,3 +8,8 @@ src/main/r/rsconnect/
 .Rproj.user
 img/
 src/main/r/r.Rproj
+.Rhistory
+bob-dylan-haikus.Rproj
+src/main/r/.Rhistory
+src/main/r/dylan_sentimental_analysis.html
+src/main/r/figure/
